@@ -1,0 +1,131 @@
+<div>Teachable Machine Image Model</div>
+<input type="checkbox" name="stream" value="stream" id="stream" checked disabled>
+<button type="button" onclick="init()">Start</button>
+<div id="webcam-container"></div>
+<div id="label-container"></div>
+
+<video id="videoInput" width="640" height="480"></video>
+
+<canvas id="canvasOutput" width="320" height="240"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+<script src="https://docs.opencv.org/3.4/opencv.js"></script>
+<script type="text/javascript">
+
+    const URL = "models/";
+
+    let model, webcam, labelContainer, maxPredictions;
+
+    // Load the image model and setup the webcam
+    async function init() {
+        const modelURL = URL + "model.json";
+        const model = await tf.loadLayersModel('localstorage://' + modelURL);
+
+        console.log("Model load success.");
+        let checkBox = document.getElementById("stream");
+        checkBox.checked = true;
+
+        let video = document.getElementById("videoInput"); // video is the id of video tag
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then(function (stream) {
+                video.srcObject = stream;
+                video.play();
+            })
+            .catch(function (err) {
+                console.log("An error occurred! " + err);
+            });
+
+        let src = new cv.Mat(480, 640, cv.CV_8UC4);
+        let dst = new cv.Mat(128, 128, cv.CV_8UC1);
+        let cap = new cv.VideoCapture(video);
+
+        const FPS = 30;
+
+        function processVideo() {
+            let begin = Date.now();
+            cap.read(src);
+            // cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+            dst = processImage(src);
+            cv.imshow("canvasOutput", dst);
+            // src.delete();
+            dst.delete();
+            // schedule next one.
+            let delay = 1000 / FPS - (Date.now() - begin);
+
+            if (checkBox.checked == true) {
+                setTimeout(processVideo, delay);
+            } else {
+                stop(video)
+            }
+        }
+
+        // schedule first one.
+        setTimeout(processVideo, 0);
+    }
+
+    function stop(video) {
+        var stream = video.srcObject;
+        var tracks = stream.getTracks();
+
+        for (var i = 0; i < tracks.length; i++) {
+            var track = tracks[i];
+            track.stop();
+        }
+
+        video.srcObject = null;
+    }
+
+    function processImage(src) {
+        let dst = new cv.Mat();
+        let dsize = new cv.Size(128, 128);
+        cv.resize(src, dst, dsize, 0, 0, cv.INTER_AREA);
+        let conv1 = new cv.Mat();
+        let conv2 = new cv.Mat();
+        cv.cvtColor(dst, conv1, cv.COLOR_RGB2HSV, 0);
+        cv.cvtColor(dst, conv2, cv.COLOR_RGBA2GRAY, 0);
+
+        let lower = [0, 40, 30, 0];
+        let higher = [43, 255, 254, 255];
+        // let lower = [0, 0, 0, 0];
+        // let higher = [150, 150, 150, 255];
+
+        let mask = new cv.Mat(128, 128, cv.CV_8UC3);
+        let low = new cv.Mat(128, 128, cv.CV_8UC3, lower);
+        // console.log(conv1.data)
+        let high = new cv.Mat(128, 128, cv.CV_8UC3, higher);
+        cv.inRange(conv1, low, high, mask);
+
+        cv.addWeighted(mask, 0.5, mask, 0.5, 0.0, mask);
+        cv.medianBlur(mask, mask, 5);
+
+        let skin = new cv.Mat();
+        cv.bitwise_and(conv2, conv2, skin, mask)
+
+        let edges = new cv.Mat();
+        cv.Canny(skin, edges, 60, 60, 3, false);
+        dst.delete();
+        low.delete();
+        high.delete();
+        conv1.delete();
+        conv2.delete();
+        mask.delete();
+        skin.delete();
+
+        return edges;
+    }
+
+    function drawRect(src) {
+        let point1 = new cv.Point(50, 100);
+        let point2 = new cv.Point(170, 228);
+        cv.rectangle(src, point1, point2, [255, 0, 0, 255]);
+        return src;
+    }
+
+    function cropImage(src) {
+        let rect = new cv.Rect(50, 50, 178, 178);
+        return src.roi(rect)
+    }
+
+
+
+</script>
