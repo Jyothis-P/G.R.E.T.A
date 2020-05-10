@@ -1,6 +1,6 @@
 <div>Teachable Machine Image Model</div>
-<input type="checkbox" name="stream" value="stream" id="stream" checked disabled>
-<button type="button" onclick="init()">Start</button>
+<input type="checkbox" name="stream" value="stream" id="stream" disabled>
+<button type="button" onclick="init()">Start / Stop</button>
 <div id="webcam-container"></div>
 <div id="label-container"></div>
 
@@ -12,19 +12,29 @@
 <script src="https://docs.opencv.org/3.4/opencv.js"></script>
 <script type="text/javascript">
 
-    const URL = "models/";
+    const URL = "https://raw.githubusercontent.com/Jyothis-P/G.R.E.T.A/master/models/model.json";
 
     let model, webcam, labelContainer, maxPredictions;
 
+    const CATEGORIES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'nothing'];
+
     // Load the image model and setup the webcam
     async function init() {
-        const modelURL = URL + "model.json";
-        const model = await tf.loadLayersModel('localstorage://' + modelURL);
+        // const modelURL = URL + "model.json";
+        const model = await tf.loadLayersModel(URL);
 
         console.log("Model load success.");
         let checkBox = document.getElementById("stream");
+
+        if (checkBox.checked == true) {
+            checkBox.checked = false;
+            return;
+        }
+
+
         checkBox.checked = true;
 
+        labelContainer = document.getElementById('label-container');
         let video = document.getElementById("videoInput"); // video is the id of video tag
         navigator.mediaDevices.getUserMedia({ video: true, audio: false })
             .then(function (stream) {
@@ -47,8 +57,19 @@
             // cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
             dst = processImage(src);
             cv.imshow("canvasOutput", dst);
-            // src.delete();
+            // dst.delete();
+
+            let image = tf.browser.fromPixels(document.getElementById("canvasOutput"), 1);
+            image = image.reshape([1, 128, 128, 1])
+            let prediction = model.predict(image);
+            prediction = prediction.toBool();
             dst.delete();
+
+            let index = prediction.flatten().argMax().dataSync();
+
+            let alphabet = CATEGORIES[index];
+            labelContainer.innerHTML = alphabet;
+            console.log(alphabet);
             // schedule next one.
             let delay = 1000 / FPS - (Date.now() - begin);
 
